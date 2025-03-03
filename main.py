@@ -29,6 +29,41 @@ if not API_KEY:
 
 groq_client = Groq(api_key=API_KEY)
 
+# Hotel Information
+HOTEL_INFO = """Thira Beach Home is a luxurious seaside retreat that seamlessly blends Italian-Kerala heritage architecture with modern luxury, creating an unforgettable experience. Nestled just 150 meters from the magnificent Arabian Sea, our beachfront property offers a secluded and serene escape with breathtaking 180-degree ocean views. 
+
+The accommodations feature Kerala-styled heat-resistant tiled roofs, natural stone floors, and lime-plastered walls, ensuring a perfect harmony of comfort and elegance. Each of our Luxury Ocean View Rooms is designed to provide an exceptional stay, featuring a spacious 6x6.5 ft cot with a 10-inch branded mattress encased in a bamboo-knitted outer layer for supreme comfort.
+
+Our facilities include:
+- Personalized climate control with air conditioning and ceiling fans
+- Wardrobe and wall mirror
+- Table with attached drawer and two chairs
+- Additional window bay bed for relaxation
+- 43-inch 4K television
+- Luxury bathroom with body jets, glass roof, and oval-shaped bathtub
+- Total room area of 250 sq. ft.
+
+Modern amenities:
+- RO and UV-filtered drinking water
+- 24/7 hot water
+- Water processing unit with softened water
+- Uninterrupted power backup
+- High-speed internet with WiFi
+- Security with CCTV surveillance
+- Electric charging facility
+- Accessible design for differently-abled persons
+
+Additional services:
+- Yoga classes
+- Cycling opportunities
+- On-site dining at Samudrakani Kitchen
+- Stylish lounge and dining area
+- Long veranda with ocean views
+
+Location: Kothakulam Beach, Valappad, Thrissur, Kerala
+Contact: +91-94470 44788
+Email: thirabeachhomestay@gmail.com"""  
+
 # Connect to SQLite database
 def connect_to_db():
     return sqlite3.connect('emails.db')
@@ -46,13 +81,13 @@ def fetch_room_availability():
     return "No room details available."
 
 # Classify email queries into 3 categories: Booking Inquiry, General Inquiry, or Complaints
-def classify_query(email_body):
-    prompt = f"""Classify the following email into one of three categories:
-    1. Booking Inquiry - If the email asks about room availability or making a reservation.
-    2. General Inquiry - If the email is about general hotel information.
-    3. Complaint - If the email is about dissatisfaction or an issue with service.
+def classify_query(query_text):
+    prompt = f"""Classify the following query into one of three categories:
+    1. Booking Inquiry - If the query asks about room availability or making a reservation.
+    2. General Inquiry - If the query is about general hotel information.
+    3. Complaint - If the query is about dissatisfaction or an issue with service.
 
-    Email: {email_body}
+    Query: {query_text}
     Respond with only the category number (1, 2, or 3)."""
 
     response = groq_client.chat.completions.create(
@@ -63,12 +98,12 @@ def classify_query(email_body):
     return response.choices[0].message.content.strip()
 
 # Generate AI Response
-def generate_response(email_body, context):
+def generate_response(query_text, context):
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": "You are an AI hotel assistant. Provide polite and professional responses."},
-            {"role": "user", "content": f"Email: {email_body}\nContext: {context}"}
+            {"role": "user", "content": f"Query: {query_text}\nContext: {context}"}
         ],
         max_tokens=300
     )
@@ -137,23 +172,48 @@ def process_emails():
 
         query_type = classify_query(body)
 
-        if query_type == "1":
+        if query_type == "1":  # Booking Inquiry
             context = fetch_room_availability()
             response = generate_response(body, context)
-        elif query_type == "2":
-            context = "Thank you for reaching out! Thira Beach Home offers luxurious stays with modern amenities."
+        elif query_type == "2":  # General Inquiry
+            context = HOTEL_INFO  # Now uses hotel information
             response = generate_response(body, context)
-        elif query_type == "3":  # Complaint handling
+        elif query_type == "3":  # Complaint Handling
             response = "We're very sorry to hear about your experience. The property staff will contact you shortly to resolve the issue."
         else:
             response = "Thank you for reaching out. We will get back to you soon."
 
         send_email(email_from, f"Re: {subject}", response)
 
+# API Endpoint for Processing Emails
 @app.route('/process_emails', methods=['GET'])
 def process_email_endpoint():
     process_emails()
-    return jsonify({"message": "Email processing completed."})
+    return jsonify({"message": "Email processing completed and responses sent."})
+
+# API Endpoint for Direct Queries
+@app.route('/query', methods=['POST'])
+def handle_query():
+    data = request.get_json()
+    query = data.get("query", "")
+
+    if not query:
+        return jsonify({"error": "Query parameter is required"}), 400
+
+    query_type = classify_query(query)
+
+    if query_type == "1":
+        context = fetch_room_availability()
+        response = generate_response(query, context)
+    elif query_type == "2":
+        context = HOTEL_INFO  # Uses hotel information for responses
+        response = generate_response(query, context)
+    elif query_type == "3":
+        response = "We're very sorry to hear about your experience. The property staff will contact you shortly to resolve the issue."
+    else:
+        response = "Thank you for reaching out. We will get back to you soon."
+
+    return jsonify({"response": response})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
