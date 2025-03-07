@@ -9,16 +9,20 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 POSTMARK_API_KEY = os.getenv("POSTMARK_API_KEY")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL") 
+
 if not POSTMARK_API_KEY:
     raise ValueError("POSTMARK_API_KEY not found in environment variables")
-
+if not SENDER_EMAIL:
+    raise ValueError("SENDER_EMAIL not found in environment variables")
+    
 # Initialize Postmark client
 postmark = PostmarkClient(server_token=POSTMARK_API_KEY)
 
 def send_email(to_email, subject, body):
     try:
         response = postmark.emails.send(
-            From="dakshinasree.sreekumar@alpharithm.com",
+            From=SENDER_EMAIL,
             To=to_email,
             Subject=subject,
             HtmlBody=body
